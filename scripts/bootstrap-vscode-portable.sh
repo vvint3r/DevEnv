@@ -11,6 +11,23 @@ SETTINGS_PATH="${VSCODE_SETTINGS_PATH:-}"
 WRITE_SETTINGS=0
 SKIP_INSTALL=0
 
+to_file_uri() {
+  local path="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$path" <<'PY'
+import pathlib
+import sys
+print(pathlib.Path(sys.argv[1]).resolve().as_uri())
+PY
+  else
+    # Best-effort fallback for POSIX paths.
+    echo "file://$path"
+  fi
+}
+
+LOCAL_CSS_URI="$(to_file_uri "$ROOT_DIR/vscode/vscode-explorer-bold.css")"
+TARGET_CSS_URL="$CSS_URL"
+
 usage() {
   cat <<'USAGE'
 Usage:
@@ -80,15 +97,19 @@ if [[ ! -f "$EXT_FILE" ]]; then
   exit 1
 fi
 
-echo "==> Validating cloud CSS URL"
+echo "==> Resolving CSS source"
 if command -v curl >/dev/null 2>&1; then
   if curl -fsSLI "$CSS_URL" >/dev/null 2>&1; then
-    echo "OK: CSS URL is reachable"
+    echo "OK: Cloud CSS URL is reachable"
+    TARGET_CSS_URL="$CSS_URL"
   else
-    echo "WARN: CSS URL is not reachable right now: $CSS_URL"
+    echo "WARN: Cloud CSS URL not reachable: $CSS_URL"
+    echo "INFO: Falling back to local CSS URI: $LOCAL_CSS_URI"
+    TARGET_CSS_URL="$LOCAL_CSS_URI"
   fi
 else
-  echo "WARN: curl not found; skipping URL reachability check"
+  echo "WARN: curl not found; using local CSS URI: $LOCAL_CSS_URI"
+  TARGET_CSS_URL="$LOCAL_CSS_URI"
 fi
 
 find_vscode_cli() {
@@ -133,7 +154,7 @@ if [[ ! -f "$SETTINGS_PATH" ]]; then
   exit 1
 fi
 
-python3 - "$SETTINGS_PATH" "$CSS_URL" "$WRITE_SETTINGS" <<'PY'
+python3 - "$SETTINGS_PATH" "$TARGET_CSS_URL" "$WRITE_SETTINGS" <<'PY'
 import json
 import os
 import shutil

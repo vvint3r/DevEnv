@@ -34,6 +34,8 @@ What it does in one run:
 3. Validates `vscode_custom_css.imports` in the supplied settings file.
 4. Optionally writes missing import URL when `--write-settings` is provided.
 
+If the cloud URL is not reachable (for example private GitHub repo), the script automatically falls back to a local file URI from your cloned repo.
+
 ## Final Activation (in VS Code)
 
 1. Run `Reload Custom CSS and JS`.
@@ -43,3 +45,4 @@ What it does in one run:
 
 - Keep `vscode_custom_css.imports` in local user/profile settings, not remote workspace settings.
 - Re-run `Reload Custom CSS and JS` after VS Code updates.
+- If you want direct cloud URL imports on any machine without cloning, make the repository (or the CSS file endpoint) publicly reachable.
