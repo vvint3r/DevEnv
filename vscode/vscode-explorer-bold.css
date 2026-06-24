@@ -1,0 +1,5 @@
+/* Bold expanded folders in VS Code Explorer */
+.explorer-folders-view .monaco-list-row[aria-expanded="true"] .label-name,
+.explorer-viewlet .monaco-list-row[aria-expanded="true"] .label-name {
+  font-weight: 700 !important;
+}

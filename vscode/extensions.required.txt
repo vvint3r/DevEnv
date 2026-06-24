@@ -1,0 +1,2 @@
+# Required extensions for portable UI setup
+be5invis.vscode-custom-css
