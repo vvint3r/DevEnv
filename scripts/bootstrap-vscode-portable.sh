@@ -4,12 +4,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CSS_URL_DEFAULT="https://raw.githubusercontent.com/vvint3r/devenv/main/vscode/vscode-explorer-bold.css"
 EXT_FILE_DEFAULT="$ROOT_DIR/vscode/extensions.required.txt"
+FONTS_FILE_DEFAULT="$ROOT_DIR/vscode/fonts.required.txt"
 
 CSS_URL="$CSS_URL_DEFAULT"
 EXT_FILE="$EXT_FILE_DEFAULT"
+FONTS_FILE="$FONTS_FILE_DEFAULT"
 SETTINGS_PATH="${VSCODE_SETTINGS_PATH:-}"
 WRITE_SETTINGS=0
 SKIP_INSTALL=0
+SKIP_FONT_CHECK=0
+INSTALL_FONTS=0
 
 to_file_uri() {
   local path="$1"
@@ -38,6 +42,9 @@ Options:
   --write-settings      Add CSS URL into settings if missing.
   --css-url <url>       Override default CSS URL.
   --ext-file <path>     Extension list file (default: vscode/extensions.required.txt).
+  --fonts-file <path>   Font list file (default: vscode/fonts.required.txt).
+  --skip-font-check     Skip checking whether required fonts are installed.
+  --install-fonts       Try installing missing fonts on Linux (apt).
   --skip-install        Skip extension installation.
   -h, --help            Show help.
 
@@ -71,6 +78,18 @@ while [[ $# -gt 0 ]]; do
       EXT_FILE="$2"
       shift 2
       ;;
+    --fonts-file)
+      FONTS_FILE="$2"
+      shift 2
+      ;;
+    --skip-font-check)
+      SKIP_FONT_CHECK=1
+      shift
+      ;;
+    --install-fonts)
+      INSTALL_FONTS=1
+      shift
+      ;;
     --skip-install)
       SKIP_INSTALL=1
       shift
@@ -95,6 +114,103 @@ fi
 if [[ ! -f "$EXT_FILE" ]]; then
   echo "ERROR: Extension manifest not found: $EXT_FILE" >&2
   exit 1
+fi
+
+check_font_present() {
+  local font="$1"
+  fc-list : family | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -Fxqi "$font"
+}
+
+install_font_linux_apt() {
+  local font="$1"
+  local apt_cmd=""
+  local pkg=""
+  local -a candidates=()
+
+  case "$font" in
+    "Fira Code")
+      candidates=("fonts-firacode")
+      ;;
+    "Inter")
+      candidates=("fonts-inter")
+      ;;
+    "Nunito")
+      candidates=("fonts-nunito")
+      ;;
+    "Google Sans Code")
+      echo "INFO: Google Sans Code is not typically available via distro package managers; install manually."
+      return 1
+      ;;
+    *)
+      echo "INFO: No known package mapping for '$font'; install manually."
+      return 1
+      ;;
+  esac
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    apt_cmd="sudo apt-get"
+  elif command -v apt-get >/dev/null 2>&1; then
+    apt_cmd="apt-get"
+  fi
+
+  if [[ -z "$apt_cmd" ]]; then
+    echo "WARN: apt-get not available or sudo non-interactive not permitted."
+    return 1
+  fi
+
+  for pkg in "${candidates[@]}"; do
+    if apt-cache show "$pkg" >/dev/null 2>&1; then
+      echo "Installing package '$pkg' for font '$font'"
+      $apt_cmd install -y "$pkg" && return 0
+    fi
+  done
+
+  echo "WARN: No available apt package found for '$font' (checked: ${candidates[*]})."
+  return 1
+}
+
+if [[ "$SKIP_FONT_CHECK" -eq 0 ]]; then
+  echo "==> Checking required fonts"
+  if [[ ! -f "$FONTS_FILE" ]]; then
+    echo "WARN: Font manifest not found: $FONTS_FILE"
+  elif ! command -v fc-list >/dev/null 2>&1; then
+    echo "WARN: fc-list not found (fontconfig missing); cannot verify installed fonts."
+  else
+    missing_fonts=()
+    while IFS= read -r line; do
+      font="${line%%#*}"
+      font="$(echo "$font" | xargs)"
+      [[ -z "$font" ]] && continue
+      if check_font_present "$font"; then
+        echo "FONT OK: $font"
+      else
+        echo "FONT MISSING: $font"
+        missing_fonts+=("$font")
+      fi
+    done < "$FONTS_FILE"
+
+    if [[ "$INSTALL_FONTS" -eq 1 && "${#missing_fonts[@]}" -gt 0 ]]; then
+      echo "==> Attempting to install missing fonts"
+      if command -v apt-get >/dev/null 2>&1; then
+        if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+          sudo apt-get update -y || true
+        fi
+      fi
+
+      for font in "${missing_fonts[@]}"; do
+        install_font_linux_apt "$font" || true
+      done
+
+      echo "==> Re-checking fonts after install attempt"
+      for font in "${missing_fonts[@]}"; do
+        if check_font_present "$font"; then
+          echo "FONT OK: $font"
+        else
+          echo "FONT STILL MISSING: $font"
+        fi
+      done
+    fi
+  fi
 fi
 
 echo "==> Resolving CSS source"
