@@ -121,6 +121,72 @@ check_font_present() {
   fc-list : family | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -Fxqi "$font"
 }
 
+# Direct-download fallback, sourced from Google's canonical open-source fonts repo
+# (github.com/google/fonts). Installs per-user into ~/.local/share/fonts - no sudo/root
+# needed, no distro package required, works identically on any Linux machine.
+download_font_from_google_fonts() {
+  local font="$1"
+  local -a entries=()
+
+  case "$font" in
+    "Fira Code")
+      entries=(
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/firacode/FiraCode%5Bwght%5D.ttf|FiraCode-VF.ttf"
+      )
+      ;;
+    "Inter")
+      entries=(
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf|Inter-VF.ttf"
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf|Inter-Italic-VF.ttf"
+      )
+      ;;
+    "Nunito")
+      entries=(
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/Nunito%5Bwght%5D.ttf|Nunito-VF.ttf"
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/Nunito-Italic%5Bwght%5D.ttf|Nunito-Italic-VF.ttf"
+      )
+      ;;
+    "Google Sans Code")
+      entries=(
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/googlesanscode/GoogleSansCode%5Bwght%5D.ttf|GoogleSansCode-VF.ttf"
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/googlesanscode/GoogleSansCode-Italic%5Bwght%5D.ttf|GoogleSansCode-Italic-VF.ttf"
+      )
+      ;;
+    *)
+      echo "INFO: No known Google Fonts source mapping for '$font'; install manually."
+      return 1
+      ;;
+  esac
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "WARN: curl not found; cannot download '$font'."
+    return 1
+  fi
+
+  local dest_dir="${HOME}/.local/share/fonts/devenv"
+  mkdir -p "$dest_dir"
+
+  local entry url dest_name ok=0
+  for entry in "${entries[@]}"; do
+    url="${entry%%|*}"
+    dest_name="${entry##*|}"
+    if curl -fsSL "$url" -o "$dest_dir/$dest_name"; then
+      ok=1
+    else
+      echo "WARN: Failed to download $url"
+      rm -f "$dest_dir/$dest_name"
+    fi
+  done
+
+  if [[ "$ok" -eq 1 ]]; then
+    command -v fc-cache >/dev/null 2>&1 && fc-cache -f "$dest_dir" >/dev/null 2>&1
+    echo "Installed '$font' into $dest_dir (per-user, no sudo required)."
+    return 0
+  fi
+
+  return 1
+}
+
 install_font_linux_apt() {
   local font="$1"
   local apt_cmd=""
@@ -134,39 +200,33 @@ install_font_linux_apt() {
     "Inter")
       candidates=("fonts-inter")
       ;;
-    "Nunito")
-      candidates=("fonts-nunito")
-      ;;
-    "Google Sans Code")
-      echo "INFO: Google Sans Code is not typically available via distro package managers; install manually."
-      return 1
-      ;;
     *)
-      echo "INFO: No known package mapping for '$font'; install manually."
-      return 1
+      candidates=()
       ;;
   esac
 
-  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
-    apt_cmd="sudo apt-get"
-  elif command -v apt-get >/dev/null 2>&1; then
-    apt_cmd="apt-get"
-  fi
-
-  if [[ -z "$apt_cmd" ]]; then
-    echo "WARN: apt-get not available or sudo non-interactive not permitted."
-    return 1
-  fi
-
-  for pkg in "${candidates[@]}"; do
-    if apt-cache show "$pkg" >/dev/null 2>&1; then
-      echo "Installing package '$pkg' for font '$font'"
-      $apt_cmd install -y "$pkg" && return 0
+  if [[ "${#candidates[@]}" -gt 0 ]]; then
+    if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+      apt_cmd="sudo apt-get"
+    elif command -v apt-get >/dev/null 2>&1 && [[ "$(id -u)" -eq 0 ]]; then
+      apt_cmd="apt-get"
     fi
-  done
 
-  echo "WARN: No available apt package found for '$font' (checked: ${candidates[*]})."
-  return 1
+    if [[ -n "$apt_cmd" ]]; then
+      for pkg in "${candidates[@]}"; do
+        if apt-cache show "$pkg" >/dev/null 2>&1; then
+          echo "Installing package '$pkg' for font '$font'"
+          $apt_cmd install -y "$pkg" && return 0
+        fi
+      done
+      echo "WARN: No available apt package found for '$font' (checked: ${candidates[*]})."
+    else
+      echo "INFO: No passwordless sudo/root available; skipping apt install for '$font'."
+    fi
+  fi
+
+  echo "INFO: Falling back to direct download from Google's open-source fonts repo for '$font'."
+  download_font_from_google_fonts "$font"
 }
 
 if [[ "$SKIP_FONT_CHECK" -eq 0 ]]; then
