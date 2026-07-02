@@ -2,6 +2,9 @@
 
 Portable VS Code profile + bootstrap for consistent setup across machines.
 
+For the full end-to-end replication walkthrough (new workstations, WSL, Remote-SSH,
+what's one-time vs. recurring, publishing changes) see **[SETUP.md](SETUP.md)**.
+
 ## Included
 
 - `vscode/vscode-explorer-bold.css`: Explorer bold-folder style (expanded folders).
@@ -40,7 +43,7 @@ What it does in one run:
 Font options:
 
 - `--skip-font-check`: Skip required font verification.
-- `--install-fonts`: Attempt Linux apt install for missing fonts in `vscode/fonts.required.txt`.
+- `--install-fonts`: Install missing fonts in `vscode/fonts.required.txt` - tries apt first (needs passwordless sudo or root), then falls back to a direct download from Google's open-source fonts repo into `~/.local/share/fonts` (no sudo required, works on any Linux machine).
 
 If the cloud URL is not reachable (for example private GitHub repo), the script automatically falls back to a local file URI from your cloned repo.
 
@@ -54,4 +57,4 @@ If the cloud URL is not reachable (for example private GitHub repo), the script 
 - Keep `vscode_custom_css.imports` in local user/profile settings, not remote workspace settings.
 - Re-run `Reload Custom CSS and JS` after VS Code updates.
 - If you want direct cloud URL imports on any machine without cloning, make the repository (or the CSS file endpoint) publicly reachable.
-- Fonts are validated by manifest, but some fonts (for example Google Sans Code) may still require manual install.
+- Fonts are validated by manifest; `--install-fonts` covers all four required fonts now (apt where a real package exists, direct download otherwise) - manual install is only needed if a machine has no internet access to `raw.githubusercontent.com`.

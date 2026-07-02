@@ -1,0 +1,137 @@
+# Setup: replicating this environment on another workstation
+
+End-to-end steps for getting a new machine to match this one - extensions, fonts,
+custom CSS, editor settings. Primary target is **VS Code Insiders**. Notes on Cursor
+are called out explicitly where they differ; don't assume Cursor unless you're
+actually configuring a Cursor machine.
+
+## Two layers this repo provides
+
+- **Lightweight bootstrap** (`scripts/bootstrap-vscode-portable.sh`, documented in
+  `README.md`): custom CSS import, font check/install, and the real portable
+  extension set. Cross-platform (Windows/Linux/macOS - needs bash + python3).
+- **Sync system** (`.vscode/scripts/extensions-lean.sh` in your workspace, documented
+  in `vscode/SYNC_QUICK_REFERENCE.md` / `vscode/REPLICATION_TIERS.md`): version-locked
+  extension installs, workspace `tasks.json`/`settings.json`, and a curated editor
+  settings snapshot (`profile.settings.json`).
+
+## Prerequisites
+
+- bash, python3, curl, git
+- A VS Code Insiders CLI reachable in `PATH` (`code-insiders`) for the extension-install
+  steps to run for real instead of falling back to a manifest-only scan.
+
+## New workstation: step by step
+
+**1. Clone:**
+```bash
+git clone https://github.com/vvint3r/DevEnv.git ~/devenv
+```
+
+**2. Bootstrap CSS, fonts, and extensions.**
+
+Point `--settings` at *this machine's actual* VS Code Insiders settings file - which
+one that is depends on how you're running the editor here:
+
+| How you're running VS Code Insiders on this machine | `--settings` path |
+|---|---|
+| Local desktop install (Linux) | `~/.config/Code - Insiders/User/settings.json` |
+| Local desktop install (Windows) | `%APPDATA%\Code - Insiders\User\settings.json` |
+| Remote-SSH target (editor runs on Windows, connects here) | `~/.vscode-server-insiders/data/Machine/settings.json` |
+| Remote-WSL target (editor runs on Windows, connects into WSL) | `~/.vscode-server-insiders/data/Machine/settings.json` (inside the WSL filesystem) |
+
+The Remote-SSH/Remote-WSL case is easy to get wrong - the flat `User/settings.json`
+usually doesn't exist or is empty on the remote side, because most UI-level settings
+stay client-side. The settings that actually apply to *this remote host* live in the
+remote-machine scope instead. Verify before assuming - don't guess:
+```bash
+find ~/.vscode-server-insiders/data -maxdepth 2 -iname "settings.json"
+```
+
+```bash
+cd ~/devenv
+bash scripts/bootstrap-vscode-portable.sh \
+  --settings "<path from the table above>" \
+  --write-settings --install-fonts
+```
+
+Fonts: Fira Code and Inter try apt first (works if this machine has passwordless sudo
+or you're root); otherwise, and always for Nunito and Google Sans Code, it downloads
+straight from Google's canonical open-source fonts repo into `~/.local/share/fonts` -
+no sudo needed, works on any Linux machine with internet access. Nothing here is
+specific to any particular host.
+
+**3. Seed the sync engine into this workspace** (a fresh workspace has no
+`.vscode/scripts/extensions-lean.sh` yet):
+```bash
+mkdir -p .vscode/scripts
+tar -xzf ~/devenv/vscode/sync-bundles/latest.tar.gz -C /tmp/devenv-bundle
+cp /tmp/devenv-bundle/*/extensions-lean.sh .vscode/scripts/
+```
+
+**4. Import the extension lock, workspace config, and editor settings:**
+```bash
+bash .vscode/scripts/extensions-lean.sh sync-import ~/devenv/vscode/sync-bundles/latest.tar.gz install-locked
+```
+This installs the version-locked extension set, restores `tasks.json`/`settings.json`,
+and automatically merges the captured `profile.settings.json` into whichever local
+settings file it can find on this machine (checking the same location set as the table
+above, plus local desktop paths) - no manual step needed. Watch its output; if it can't
+find a usable target it says so and tells you what to set in `.vscode/profile-map.env`.
+
+**5. In the editor:** run **Reload Custom CSS and JS**, then **Developer: Reload
+Window**. Re-run just the CSS reload after any VS Code Insiders version update - the
+extension patches the editor's own files, and updates overwrite that patch.
+
+## Connecting to WSL specifically
+
+```powershell
+wsl --install -d Ubuntu
+```
+Then in VS Code Insiders, install the **WSL** extension (`ms-vscode-remote.remote-wsl`,
+official Microsoft extension - works cleanly since Insiders is an official Microsoft
+build). Connect either by running `code-insiders .` from inside a WSL terminal in your
+project directory, or via Command Palette -> **WSL: Connect to WSL**.
+
+(If you're setting up a *Cursor* machine instead: Cursor ships its own built-in remote
+extension for this - don't install Microsoft's `ms-vscode-remote.remote-wsl` on top of
+it, that combination is currently causing connection conflicts.)
+
+## What's one-time vs. what recurs
+
+Everything in steps 1-4 writes to persistent storage (the machine's real filesystem,
+not something that resets on reconnect) - fonts, extensions, settings, the cloned repo.
+None of it needs repeating just because you close/reopen the editor, restart WSL
+(`wsl --shutdown` doesn't wipe the disk), or reboot. The only recurring action is the
+CSS reload in step 5, and only after an editor version update - not tied to session or
+WSL restarts at all.
+
+## Publishing changes from a source machine
+
+```bash
+cd /path/to/workspace-root
+bash .vscode/scripts/extensions-lean.sh sync-publish
+cd ~/devenv
+git add vscode/extensions.required.txt vscode/extensions.lock.txt vscode/sync-bundles
+git commit -m "Publish latest sync bundle"
+git push
+```
+
+`sync-publish` strips `user-data/` (real `mcp.json`/`settings.json`/`keybindings.json`/
+`profiles/`) before anything reaches this repo - those files can carry inline API keys
+for MCP servers, and this repo is public. Full data still gets captured locally in
+`~/.vscode/portable-sync/` for machine-to-machine `sync-import` outside the repo.
+
+Before publishing from a *new* source machine for the first time, set
+`.vscode/profile-map.env` correctly for how you're actually running VS Code Insiders
+there (see the table above) - a wrong or defaulted path here will silently capture and
+publish the wrong editor's settings as the canonical profile snapshot.
+
+## What doesn't replicate
+
+See `vscode/REPLICATION_TIERS.md` for the full breakdown. Always manual regardless of
+platform: fonts not covered by the direct-download fallback, any credential/auth/token
+state, OS-level packages, shell/PATH customization. Cross-OS full settings/keybindings
+restore (not just the curated `profile.settings.json`) only works between machines in
+the same OS family - the automatic restore path uses Linux/XDG-style paths and has no
+Windows-native equivalent.
