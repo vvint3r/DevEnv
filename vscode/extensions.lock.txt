@@ -1,6 +1,6 @@
 almenon.arepl@3.0.0
 amazonwebservices.aws-toolkit-vscode@4.7.0
-anthropic.claude-code@2.1.197
+anthropic.claude-code@2.1.198
 batisteo.vscode-django@1.15.0
 bierner.markdown-footnotes@0.1.1
 bierner.markdown-mermaid@1.32.1

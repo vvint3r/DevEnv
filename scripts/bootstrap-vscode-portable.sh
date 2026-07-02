@@ -32,6 +32,11 @@ PY
 LOCAL_CSS_URI="$(to_file_uri "$ROOT_DIR/vscode/vscode-explorer-bold.css")"
 TARGET_CSS_URL="$CSS_URL"
 
+is_wsl() {
+  [[ -n "${WSL_DISTRO_NAME:-}" ]] && return 0
+  grep -qi microsoft /proc/version 2>/dev/null
+}
+
 usage() {
   cat <<'USAGE'
 Usage:
@@ -49,14 +54,31 @@ Options:
   -h, --help            Show help.
 
 Examples:
-  bash scripts/bootstrap-vscode-portable.sh \
-    --settings "$APPDATA/Code - Insiders/User/settings.json" \
-    --write-settings
+  Native Windows (PowerShell/Git Bash, $APPDATA is a real env var there):
+    bash scripts/bootstrap-vscode-portable.sh \
+      --settings "$APPDATA/Code - Insiders/User/settings.json" \
+      --write-settings
 
-  bash scripts/bootstrap-vscode-portable.sh \
-    --settings "$APPDATA/Cursor/User/settings.json" \
-    --css-url "https://raw.githubusercontent.com/vvint3r/devenv/main/vscode/vscode-explorer-bold.css" \
-    --write-settings
+  Native Linux / Cursor:
+    bash scripts/bootstrap-vscode-portable.sh \
+      --settings "$HOME/.config/Cursor/User/settings.json" \
+      --css-url "https://raw.githubusercontent.com/vvint3r/devenv/main/vscode/vscode-explorer-bold.css" \
+      --write-settings
+
+  Remote-SSH / Remote-WSL (editor UI runs on Windows, connects into this host):
+  $APPDATA is a Windows-only env var and is NOT exported into a WSL/SSH remote
+  shell - it silently resolves to an empty string there. Also, on a remote
+  target the flat User/settings.json often doesn't exist or is empty, because
+  most UI-level settings stay client-side; the ones that apply to *this*
+  remote host live in that remote's Machine scope instead. Don't guess - verify
+  what's actually there first:
+    find ~/.vscode-server-insiders/data -maxdepth 2 -iname "settings.json"
+  then, typically:
+    bash scripts/bootstrap-vscode-portable.sh \
+      --settings "$HOME/.vscode-server-insiders/data/Machine/settings.json" \
+      --write-settings
+  See SETUP.md for the full decision table (covers Remote-SSH vs Remote-WSL,
+  local-desktop, and what to do if that file doesn't exist yet).
 USAGE
 }
 
@@ -319,15 +341,36 @@ if [[ "$SKIP_INSTALL" -eq 0 ]]; then
 fi
 
 if [[ -z "$SETTINGS_PATH" ]]; then
-  echo "==> Settings check skipped (pass --settings <path> to validate/apply imports)"
+  if is_wsl; then
+    echo "==> Settings check skipped (pass --settings <path> to validate/apply imports)"
+    echo "INFO: On a Remote-SSH/Remote-WSL target, the file that matters is usually this"
+    echo "      remote's Machine scope, not a local desktop path. Verify what's actually"
+    echo "      present before guessing:"
+    echo "        find ~/.vscode-server-insiders/data -maxdepth 2 -iname settings.json"
+    echo "      See SETUP.md for the full decision table."
+  else
+    echo "==> Settings check skipped (pass --settings <path> to validate/apply imports)"
+  fi
   echo "Done."
   exit 0
 fi
 
 echo "==> Validating settings at: $SETTINGS_PATH"
 if [[ ! -f "$SETTINGS_PATH" ]]; then
-  echo "ERROR: settings.json not found: $SETTINGS_PATH" >&2
-  exit 1
+  if [[ "$WRITE_SETTINGS" -eq 1 && -d "$(dirname "$SETTINGS_PATH")" ]]; then
+    # A remote Machine-scope settings.json (and some fresh User-scope ones) simply
+    # doesn't exist until the first setting is ever written there - VS Code treats
+    # that as an empty {} scope, not an error. Only bail if the parent dir is also
+    # missing, which means this location was never a real settings scope at all.
+    echo "INFO: settings.json does not exist yet at this location - seeding an empty one (normal for a scope nothing has written to before)."
+    printf '{}\n' > "$SETTINGS_PATH"
+  else
+    echo "ERROR: settings.json not found: $SETTINGS_PATH" >&2
+    echo "TIP: if this is a remote Machine-scope path, its parent directory only appears" >&2
+    echo "     after you've connected to that remote at least once in VS Code. Re-run with" >&2
+    echo "     --write-settings to create the file if the parent directory does exist." >&2
+    exit 1
+  fi
 fi
 
 python3 - "$SETTINGS_PATH" "$TARGET_CSS_URL" "$WRITE_SETTINGS" <<'PY'
