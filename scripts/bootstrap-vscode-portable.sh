@@ -14,6 +14,8 @@ WRITE_SETTINGS=0
 SKIP_INSTALL=0
 SKIP_FONT_CHECK=0
 INSTALL_FONTS=0
+CSS_DEST=""
+CSS_URI_OVERRIDE=""
 
 to_file_uri() {
   local path="$1"
@@ -46,6 +48,12 @@ Options:
   --settings <path>     Path to local VS Code user settings.json to validate.
   --write-settings      Add CSS URL into settings if missing.
   --css-url <url>       Override default CSS URL.
+  --css-dest <path>     Copy the repo CSS to <path> (a client-readable location) and
+                        point the settings import at it. On WSL a /mnt/<drive>/ dest is
+                        auto-translated to the Windows file:///C:/... URI the UI
+                        extension actually needs. Backs up any existing file first.
+  --css-uri <uri>       Explicit import URI to write into settings (overrides the URI
+                        derived from --css-dest or the default CSS source).
   --ext-file <path>     Extension list file (default: vscode/extensions.required.txt).
   --fonts-file <path>   Font list file (default: vscode/fonts.required.txt).
   --skip-font-check     Skip checking whether required fonts are installed.
@@ -94,6 +102,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --css-url)
       CSS_URL="$2"
+      shift 2
+      ;;
+    --css-dest)
+      CSS_DEST="$2"
+      shift 2
+      ;;
+    --css-uri)
+      CSS_URI_OVERRIDE="$2"
       shift 2
       ;;
     --ext-file)
@@ -308,6 +324,41 @@ if command -v curl >/dev/null 2>&1; then
 else
   echo "WARN: curl not found; using local CSS URI: $LOCAL_CSS_URI"
   TARGET_CSS_URL="$LOCAL_CSS_URI"
+fi
+
+# --- Optional: deploy CSS to a client-readable location -----------------------
+# be5invis.vscode-custom-css is a CLIENT/UI extension: it reads the CSS file from the
+# machine running the VS Code *window*, not the remote/server it is connected to. When
+# bootstrapping from inside WSL or a Remote-SSH target, "the client" is the Windows host
+# - so the CSS must be copied somewhere Windows can read, and the import URI must be the
+# Windows path (file:///C:/...), NOT the WSL path (file:///mnt/c/...). --css-dest does
+# both: copy the repo CSS to <path> and derive the correct client URI for the settings write.
+if [[ -n "$CSS_DEST" ]]; then
+  echo "==> Deploying CSS to client location: $CSS_DEST"
+  css_dest_dir="$(dirname "$CSS_DEST")"
+  if [[ ! -d "$css_dest_dir" ]]; then
+    echo "ERROR: --css-dest parent directory does not exist: $css_dest_dir" >&2
+    echo "       Point --css-dest at a path whose parent already exists." >&2
+    exit 1
+  fi
+  if [[ -f "$CSS_DEST" ]]; then
+    css_backup="${CSS_DEST}.bak.$(date +%Y%m%d%H%M%S)"
+    cp -p "$CSS_DEST" "$css_backup"
+    echo "BACKUP: $css_backup"
+  fi
+  cp "$ROOT_DIR/vscode/vscode-explorer-bold.css" "$CSS_DEST"
+  echo "COPIED: repo CSS -> $CSS_DEST"
+
+  if [[ -n "$CSS_URI_OVERRIDE" ]]; then
+    TARGET_CSS_URL="$CSS_URI_OVERRIDE"
+  elif [[ "$CSS_DEST" == /mnt/[A-Za-z]/* ]] && command -v wslpath >/dev/null 2>&1; then
+    # WSL path pointing at a Windows file: the Windows client needs a Windows URI.
+    css_win_path="$(wslpath -w "$CSS_DEST")"   # e.g. C:\Users\Me\.vscode-explorer-bold.css
+    TARGET_CSS_URL="file:///${css_win_path//\\//}"
+  else
+    TARGET_CSS_URL="$(to_file_uri "$CSS_DEST")"
+  fi
+  echo "CSS import URI (for --settings write): $TARGET_CSS_URL"
 fi
 
 find_vscode_cli() {

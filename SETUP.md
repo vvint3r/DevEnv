@@ -61,6 +61,46 @@ straight from Google's canonical open-source fonts repo into `~/.local/share/fon
 no sudo needed, works on any Linux machine with internet access. Nothing here is
 specific to any particular host.
 
+### Custom CSS on a Remote-SSH / Remote-WSL client
+
+`be5invis.vscode-custom-css` is a **client-side UI extension**: it reads both the CSS
+file and its `vscode_custom_css.imports` setting from the machine running the VS Code
+*window* - on a remote connection that's your **Windows host**, not the remote/WSL
+target you're connected to. (This is why installing it on the remote fails with
+"declared to not run in this setup", and why a `vscode_custom_css.imports` entry placed
+in the remote's Machine-scope `settings.json` does not drive it.) So two things must
+land on the client, not the remote:
+
+1. the CSS file, copied somewhere the client can read, and
+2. the import wired into the client's **active profile** settings.json - e.g.
+   `%APPDATA%\Code - Insiders\User\profiles\<id>\settings.json` - using a client-native
+   `file:///C:/...` URI.
+
+From inside WSL you can do both in one run. `--css-dest` copies the repo CSS to the
+given `/mnt/<drive>/...` path and auto-translates it (via `wslpath`) to the Windows
+`file:///C:/...` URI the extension needs:
+
+```bash
+cd ~/devenv
+bash scripts/bootstrap-vscode-portable.sh \
+  --css-dest "/mnt/c/Users/<you>/.vscode-explorer-bold.css" \
+  --settings "/mnt/c/Users/<you>/AppData/Roaming/Code - Insiders/User/profiles/<id>/settings.json" \
+  --write-settings --skip-install --skip-font-check
+```
+
+Re-running this after you edit the CSS re-deploys it (backing up the previous client
+copy first), so the repo stays the single source of truth and the client file never
+drifts. Drop `--write-settings` to only re-deploy the file and *validate* (not modify)
+the settings - use that once the import is already wired.
+
+Note: `--write-settings` rewrites the target settings.json in a structured way
+(4-space indent, strict JSON) - it drops any hand-written `//` comments from that file.
+If you keep comments in that particular settings.json, add the one import line by hand
+instead. To find the active profile's id, look under
+`%APPDATA%\Code - Insiders\User\profiles\` (from WSL:
+`/mnt/c/Users/<you>/AppData/Roaming/Code - Insiders/User/profiles/`) - the folder whose
+`settings.json` matches the profile you actually work in.
+
 **3. Seed the sync engine into this workspace** (a fresh workspace has no
 `.vscode/scripts/extensions-lean.sh` yet):
 ```bash

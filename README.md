@@ -55,6 +55,7 @@ If the cloud URL is not reachable (for example private GitHub repo), the script 
 ## Notes
 
 - Keep `vscode_custom_css.imports` in local user/profile settings, not remote workspace settings.
+- On a Remote-SSH/Remote-WSL connection the custom-CSS extension runs on the **client** (your Windows host), so the CSS file and its import must live client-side. Use `--css-dest <path>` to copy the repo CSS to a client-readable location and auto-derive the correct `file:///C:/...` URI (a `/mnt/<drive>/` dest is translated for you on WSL); `--css-uri <uri>` overrides that derivation. See **[SETUP.md](SETUP.md)** → "Custom CSS on a Remote-SSH / Remote-WSL client".
 - Re-run `Reload Custom CSS and JS` after VS Code updates.
 - If you want direct cloud URL imports on any machine without cloning, make the repository (or the CSS file endpoint) publicly reachable.
 - Fonts are validated by manifest; `--install-fonts` covers all four required fonts now (apt where a real package exists, direct download otherwise) - manual install is only needed if a machine has no internet access to `raw.githubusercontent.com`.

@@ -1,5 +1,8 @@
-/* Bold expanded folders in VS Code Explorer */
+/* Bold + high-contrast expanded folders in the VS Code Explorer.
+   Uses the theme foreground token instead of a hard color so it stays legible on
+   light AND dark themes (captured from the live client tweak, made theme-safe). */
 .explorer-folders-view .monaco-list-row[aria-expanded="true"] .label-name,
 .explorer-viewlet .monaco-list-row[aria-expanded="true"] .label-name {
   font-weight: 700 !important;
+  color: var(--vscode-foreground) !important;
 }
