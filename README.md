@@ -1,4 +1,4 @@
-# devenv
+# DevEnv
 
 Portable VS Code profile + bootstrap for consistent setup across machines.
 
