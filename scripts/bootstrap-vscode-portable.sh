@@ -320,23 +320,51 @@ find_vscode_cli() {
       return 0
     fi
   done
+
+  # Remote-SSH/Remote-WSL server installs ship a real CLI binary under
+  # ~/.vscode-server*/code[-insiders]-<commit-hash> - it's just not on PATH.
+  # Several commit versions can coexist across reconnects; use the newest.
+  local pattern binary
+  local -a server_globs=(
+    "${HOME}/.vscode-server-insiders/code-insiders-"*
+    "${HOME}/.vscode-server/code-"*
+  )
+  local -a found=()
+  for pattern in "${server_globs[@]}"; do
+    [[ -f "$pattern" && -x "$pattern" ]] && found+=("$pattern")
+  done
+
+  if [[ "${#found[@]}" -gt 0 ]]; then
+    binary="$(ls -t "${found[@]}" 2>/dev/null | head -n 1)"
+    [[ -n "$binary" ]] && { echo "$binary"; return 0; }
+  fi
+
   return 1
 }
 
 if [[ "$SKIP_INSTALL" -eq 0 ]]; then
   echo "==> Installing required extensions"
   if CLI="$(find_vscode_cli)"; then
+    echo "Using VS Code CLI: $CLI"
     while IFS= read -r line; do
       line="${line%%#*}"
       line="$(echo "$line" | xargs)"
       [[ -z "$line" ]] && continue
       echo "Installing $line via $CLI"
-      "$CLI" --install-extension "$line" --force >/dev/null || {
+      install_output="$("$CLI" --install-extension "$line" --force 2>&1)" && install_rc=0 || install_rc=$?
+      # This specific failure mode prints its error to stdout and still exits 0,
+      # so it must be checked independently of install_rc, not gated behind it.
+      if [[ "$install_output" == *"declared to not run in this setup"* ]]; then
+        echo "INFO: '$line' is UI-only and can't be installed on this remote/server side by design."
+        echo "INFO: Install it yourself from the Extensions panel (search '$line'), using the"
+        echo "      dropdown next to Install to choose 'Install Locally' if you're connected to a remote."
+      elif [[ "$install_rc" -ne 0 ]]; then
         echo "WARN: Failed to install $line via $CLI"
-      }
+        echo "$install_output" | sed 's/^/  /'
+      fi
     done < "$EXT_FILE"
   else
-    echo "WARN: Could not find VS Code CLI (code-insiders/code/cursor). Skipping extension install."
+    echo "WARN: Could not find VS Code CLI (code-insiders/code/cursor, including remote server binaries). Skipping extension install."
   fi
 fi
 
