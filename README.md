@@ -12,6 +12,7 @@ what's one-time vs. recurring, publishing changes) see **[SETUP.md](SETUP.md)**.
 - `vscode/fonts.required.txt`: Required base fonts for consistent UI rendering.
 - `vscode/REPLICATION_TIERS.md`: Tier 1/2/3 replication matrix.
 - `vscode/SYNC_QUICK_REFERENCE.md`: End-to-end machine setup/update workflow.
+- `vscode/UI_SELECTOR_REFERENCE.md`: Map of VS Code UI components → CSS/JS selectors for custom-css tweaks.
 - `scripts/bootstrap-vscode-portable.sh`: One-run bootstrap script.
 - `profiles/Pro-Prime_26.code-profile`: Importable profile artifact.
 
