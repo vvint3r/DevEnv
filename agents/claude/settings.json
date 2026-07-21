@@ -1,0 +1,11 @@
+{
+    "model": "sonnet",
+    "effortLevel": "xhigh",
+    "tui": "fullscreen",
+    "theme": "dark",
+    "editorMode": "normal",
+    "remoteControlAtStartup": true,
+    "agentPushNotifEnabled": true,
+    "voiceEnabled": true,
+    "skipDangerousModePermissionPrompt": true
+}

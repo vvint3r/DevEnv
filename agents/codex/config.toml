@@ -1,0 +1,14 @@
+# Codex CLI configuration template.
+# Machine-specific entries (project trust paths, hook hashes, model-availability
+# notices) are intentionally omitted — Codex manages those at runtime.
+# Set OPENAI_API_KEY in your shell profile; do NOT add credentials here.
+
+personality = "pragmatic"
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+
+[tui]
+theme = "dracula"
+
+[features]
+hooks = true

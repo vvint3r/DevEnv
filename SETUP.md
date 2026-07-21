@@ -1,7 +1,7 @@
 # Setup: replicating this environment on another workstation
 
 End-to-end steps for getting a new machine to match this one - extensions, fonts,
-custom CSS, editor settings. Primary target is **VS Code Insiders**. Notes on Cursor
+custom CSS, editor settings, and agent CLIs. Primary target is **VS Code Insiders**. Notes on Cursor
 are called out explicitly where they differ; don't assume Cursor unless you're
 actually configuring a Cursor machine.
 
@@ -14,10 +14,13 @@ actually configuring a Cursor machine.
   in `vscode/SYNC_QUICK_REFERENCE.md` / `vscode/REPLICATION_TIERS.md`): version-locked
   extension installs, workspace `tasks.json`/`settings.json`, and a curated editor
   settings snapshot (`profile.settings.json`).
+- **Agent CLI setup** (`scripts/setup-agents.sh`): installs Claude Code and Codex CLIs
+  and seeds their config files from templates in `agents/`.
 
 ## Prerequisites
 
 - bash, python3, curl, git
+- Node.js / npm (or nvm) — required for the agent CLI setup step.
 - A VS Code Insiders CLI reachable in `PATH` (`code-insiders`) for the extension-install
   steps to run for real instead of falling back to a manifest-only scan.
 
@@ -101,7 +104,36 @@ instead. To find the active profile's id, look under
 `/mnt/c/Users/<you>/AppData/Roaming/Code - Insiders/User/profiles/`) - the folder whose
 `settings.json` matches the profile you actually work in.
 
-**3. Seed the sync engine into this workspace** (a fresh workspace has no
+**3. Set up agent CLIs (Claude Code and Codex).**
+
+Requires Node.js / npm (or nvm). Run from the repo root:
+
+```bash
+bash scripts/setup-agents.sh
+```
+
+This installs `@anthropic-ai/claude-code` and `@openai/codex` globally, then seeds
+`~/.claude/settings.json` and `~/.codex/config.toml` from the templates in `agents/`
+(only if those files don't already exist — safe to re-run).
+
+**Credentials are not configured by the script** — this repo is public. Add your keys
+to `~/.zshrc` or `~/.bashrc` after the script completes:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-api03-..."   # console.anthropic.com → API Keys
+export OPENAI_API_KEY="sk-..."                # platform.openai.com/api-keys
+```
+
+See `agents/.env.example` for details, including subscription notes (ChatGPT Plus/Pro
+does **not** include API credits — Codex requires a separate platform.openai.com billing
+account). If you only have one subscription:
+
+```bash
+bash scripts/setup-agents.sh --skip-codex     # Claude only
+bash scripts/setup-agents.sh --skip-claude    # Codex only
+```
+
+**4. Seed the sync engine into this workspace** (a fresh workspace has no
 `.vscode/scripts/extensions-lean.sh` yet):
 ```bash
 mkdir -p .vscode/scripts
@@ -109,7 +141,7 @@ tar -xzf ~/devenv/vscode/sync-bundles/latest.tar.gz -C /tmp/devenv-bundle
 cp /tmp/devenv-bundle/*/extensions-lean.sh .vscode/scripts/
 ```
 
-**4. Import the extension lock, workspace config, and editor settings:**
+**5. Import the extension lock, workspace config, and editor settings:**
 ```bash
 bash .vscode/scripts/extensions-lean.sh sync-import ~/devenv/vscode/sync-bundles/latest.tar.gz install-locked
 ```
@@ -119,7 +151,7 @@ settings file it can find on this machine (checking the same location set as the
 above, plus local desktop paths) - no manual step needed. Watch its output; if it can't
 find a usable target it says so and tells you what to set in `.vscode/profile-map.env`.
 
-**5. In the editor:** run **Reload Custom CSS and JS**, then **Developer: Reload
+**6. In the editor:** run **Reload Custom CSS and JS**, then **Developer: Reload
 Window**. Re-run just the CSS reload after any VS Code Insiders version update - the
 extension patches the editor's own files, and updates overwrite that patch.
 
@@ -139,12 +171,12 @@ it, that combination is currently causing connection conflicts.)
 
 ## What's one-time vs. what recurs
 
-Everything in steps 1-4 writes to persistent storage (the machine's real filesystem,
-not something that resets on reconnect) - fonts, extensions, settings, the cloned repo.
-None of it needs repeating just because you close/reopen the editor, restart WSL
-(`wsl --shutdown` doesn't wipe the disk), or reboot. The only recurring action is the
-CSS reload in step 5, and only after an editor version update - not tied to session or
-WSL restarts at all.
+Everything in steps 1-5 writes to persistent storage (the machine's real filesystem,
+not something that resets on reconnect) - fonts, extensions, settings, the cloned repo,
+agent CLIs and their configs. None of it needs repeating just because you close/reopen
+the editor, restart WSL (`wsl --shutdown` doesn't wipe the disk), or reboot. The only
+recurring action is the CSS reload in step 6, and only after an editor version update -
+not tied to session or WSL restarts at all.
 
 ## Publishing changes from a source machine
 
@@ -171,7 +203,7 @@ publish the wrong editor's settings as the canonical profile snapshot.
 
 See `vscode/REPLICATION_TIERS.md` for the full breakdown. Always manual regardless of
 platform: fonts not covered by the direct-download fallback, any credential/auth/token
-state, OS-level packages, shell/PATH customization. Cross-OS full settings/keybindings
-restore (not just the curated `profile.settings.json`) only works between machines in
-the same OS family - the automatic restore path uses Linux/XDG-style paths and has no
-Windows-native equivalent.
+state (including agent API keys), OS-level packages, shell/PATH customization.
+Cross-OS full settings/keybindings restore (not just the curated `profile.settings.json`)
+only works between machines in the same OS family - the automatic restore path uses
+Linux/XDG-style paths and has no Windows-native equivalent.
